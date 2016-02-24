@@ -1,0 +1,262 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "newStorageAccountName": {
+            "type": "string",
+            "metadata": {
+                "description": "Unique DNS name for the storage account where the virtual machine's disks will be stored."
+            }
+        },
+        "virtualMachineLocation": {
+            "type": "string",
+            "metadata": {
+                "description": "The location where the virtual machine will be deployed."
+            }
+        },
+        "virtualMachineSize": {
+            "type": "string",
+            "defaultValue": "Standard_A2",
+            "metadata": {
+                "description": "The size of the virtual machine."
+            }
+        },
+        "adminUsername": {
+            "type": "string",
+            "metadata": {
+                "description": "Username for the virtual machine."
+            }
+        },
+        "adminPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Password for the virtual machine."
+            }
+        },
+        "dnsNameForPublicIP": {
+            "type": "string",
+            "metadata": {
+                "description": "Unique DNS name for the public IP used to access the virtual machine."
+            }
+        },
+        "imagePublisher": {
+            "type": "string",
+            "metadata": {
+                "description": "The image publisher name."
+            },
+            "allowedValues": [
+                "Canonical",
+                "CoreOS"
+            ]
+        },
+        "imageOffer": {
+            "type": "string",
+            "metadata": {
+                "description": "The image offer name."
+            },
+            "allowedValues": [
+                "UbuntuServer",
+                "CoreOS"
+            ]
+        },
+        "imageSku": {
+            "type": "string",
+            "metadata": {
+                "description": "The image SKU name."
+            }
+        },
+        "base64EncodedDockerCACert": {
+            "type": "string",
+            "metadata": {
+                "description": "Base64 encoded certificate file content for the certificate authority (CA)."
+            }
+        },
+        "base64EncodedDockerServerCert": {
+            "type": "string",
+            "metadata": {
+                "description": "Base64 encoded certificate file content for the Docker server."
+            }
+        },
+        "base64EncodedDockerServerKey": {
+            "type": "string",
+            "metadata": {
+                "description": "Base64 encoded key file content for the Docker server."
+            }
+        }
+    },
+    "variables": {
+        "virtualMachineName": "[parameters('dnsNameForPublicIP')]",
+        "OSDiskName": "[concat(variables('virtualMachineName'),'-OSDisk')]",
+        "nicName": "[concat(variables('virtualMachineName'),'-NIC')]",
+        "extensionName": "[concat(variables('virtualMachineName'),'/DockerExtension')]",
+        "virtualNetworkName": "[concat(variables('virtualMachineName'),'-VNet')]",
+        "publicIPAddressName": "[concat(variables('virtualMachineName'),'-PublicIP')]",
+        "addressPrefix": "10.0.0.0/16",
+        "subnetPrefix": "10.0.0.0/24",
+        "subnetName": "Subnet",
+        "storageAccountType": "Standard_LRS",
+        "publicIPAddressType": "Dynamic",
+        "vmStorageAccountContainerName": "vhds",
+        "virtualNetworkId": "[resourceId('Microsoft.Network/virtualNetworks',variables('virtualNetworkName'))]",
+        "subnetRef": "[concat(variables('virtualNetworkId'),'/subnets/',variables('subnetName'))]",
+        "dockerServerPort": "2376"
+    },
+    "resources": [
+        {
+            "apiVersion": "2015-05-01-preview",
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[parameters('newStorageAccountName')]",
+            "tags": {
+                "displayName": "StorageAccount"
+            },
+            "location": "[parameters('virtualMachineLocation')]",
+            "properties": {
+                "accountType": "[variables('storageAccountType')]"
+            }
+        },
+        {
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "tags": {
+                "displayName": "PublicIPAddress"
+            },
+            "name": "[variables('publicIPAddressName')]",
+            "location": "[parameters('virtualMachineLocation')]",
+            "properties": {
+                "publicIPAllocationMethod": "[variables('publicIPAddressType')]",
+                "dnsSettings": {
+                    "domainNameLabel": "[parameters('dnsNameForPublicIP')]"
+                }
+            }
+        },
+        {
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[variables('virtualNetworkName')]",
+            "tags": {
+                "displayName": "VirtualNetwork"
+            },
+            "location": "[parameters('virtualMachineLocation')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('addressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('subnetName')]",
+                        "properties": {
+                            "addressPrefix": "[variables('subnetPrefix')]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Network/networkInterfaces",
+            "name": "[variables('nicName')]",
+            "tags": {
+                "displayName": "NetworkInterface"
+            },
+            "location": "[parameters('virtualMachineLocation')]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPAddressName'))]",
+                "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPAddressName'))]"
+                            },
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Compute/virtualMachines",
+            "name": "[variables('virtualMachineName')]",
+            "tags": {
+                "displayName": "VirtualMachine"
+            },
+            "location": "[parameters('virtualMachineLocation')]",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', parameters('newStorageAccountName'))]",
+                "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'))]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('virtualMachineSize')]"
+                },
+                "osProfile": {
+                    "computerName": "[variables('virtualMachineName')]",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[parameters('imagePublisher')]",
+                        "offer": "[parameters('imageOffer')]",
+                        "sku": "[parameters('imageSku')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "osdisk",
+                        "vhd": {
+                            "uri": "[concat('http://',parameters('newStorageAccountName'),'.blob.core.windows.net/',variables('vmStorageAccountContainerName'),'/',variables('OSDiskName'),'.vhd')]"
+                        },
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces',variables('nicName'))]"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "name": "[variables('extensionName')]",
+            "tags": {
+                "displayName": "DockerExtension"
+            },
+            "location": "[parameters('virtualMachineLocation')]",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/', variables('virtualMachineName'))]"
+            ],
+            "properties": {
+                "publisher": "Microsoft.Azure.Extensions",
+                "type": "DockerExtension",
+                "typeHandlerVersion": "1.0",
+                "autoUpgradeMinorVersion": true,
+                "settings": {
+                    "docker": {
+                        "port": "[variables('dockerServerPort')]"
+                    }
+                },
+                "protectedSettings": {
+                    "certs": {
+                        "ca": "[parameters('base64EncodedDockerCACert')]",
+                        "cert": "[parameters('base64EncodedDockerServerCert')]",
+                        "key": "[parameters('base64EncodedDockerServerKey')]"
+                    }
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,30 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "virtualMachineLocation": {
+            "value": "southeastasia"
+        },
+        "imagePublisher": {
+            "value": "Canonical"
+        },
+        "imageOffer": {
+            "value": "UbuntuServer"
+        },
+        "imageSku": {
+            "value": "14.04.3-DAILY-LTS"
+        },
+        "dnsNameForPublicIP": {
+            "value": "ms-docker-lnx-host"
+        },
+        "virtualMachineSize": {
+            "value": "Basic_A0"
+        },
+        "adminUsername": {
+            "value": "MaheshAdmin"
+        },
+        "newStorageAccountName": {
+            "value": "msdockerlnxhost1b3f5fa2"
+        }
+    }
+}
